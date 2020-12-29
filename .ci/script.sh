@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -ex
+set -e
 
 # Sanity checks for required environment variables.
 if [ -z "$BUILD_TYPE" ]; then
@@ -30,6 +30,38 @@ fi
 if [ -z "$BUILD_DIR" ]; then
   echo "Error: Environment variable BUILD_DIR is unset. Using $PWD by default."
   BUILD_DIR=$PWD
+fi
+
+if [ -f /etc/os-release ]; then
+  # freedesktop.org and systemd
+  . /etc/os-release
+  OS=$NAME
+  VER=$VERSION_ID
+elif type lsb_release >/dev/null 2>&1; then
+  # linuxbase.org
+  OS=$(lsb_release -si)
+  VER=$(lsb_release -sr)
+elif [ -f /etc/lsb-release ]; then
+  # For some versions of Debian/Ubuntu without lsb_release command
+  . /etc/lsb-release
+  OS=$DISTRIB_ID
+  VER=$DISTRIB_RELEASE
+elif [ -f /etc/debian_version ]; then
+  # Older Debian/Ubuntu/etc.
+  OS=Debian
+  VER=$(cat /etc/debian_version)
+elif [ -f /etc/SuSe-release ]; then
+  # Older SuSE/etc.
+  echo "Not supported"
+  exit 1
+elif [ -f /etc/redhat-release ]; then
+  # Older Red Hat, CentOS, etc.
+  echo "Not supported"
+  exit 1
+else
+  # Fall back to uname, e.g. "Linux <version>", also works for BSD, etc.
+  OS=$(uname -s)
+  VER=$(uname -r)
 fi
 
 # Set number of threads for parallel build
@@ -69,6 +101,17 @@ if [ $BUILD_DOCS = "ON" ]; then
   . "${BUILD_DIR}/.ci/travis/build_docs.sh"
   exit 0
 fi
+
+echo "====================================="
+echo ""
+echo " [ SYSTEM INFO ]"
+echo ""
+echo " OS      : $OS $VER ($(uname -m))"
+echo " Cores   : $num_threads / $(nproc --all)"
+echo " Compiler: $COMPILER $($CXX --version | perl -pe '($_)=/([0-9]+([.][0-9]+)+)/')"
+echo " CMake   : $(cmake --version | perl -pe '($_)=/([0-9]+([.][0-9]+)+)/')"
+echo ""
+echo "====================================="
 
 # Run CMake
 mkdir build && cd build

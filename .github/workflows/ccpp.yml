@@ -24,27 +24,43 @@ env:
       /bin/sh -c "cd $GITHUB_WORKSPACE && ./.ci/script.sh"
 
 jobs:
-  xenial_gcc_release:
-    name: Ubuntu 16.04 [GCC|Release]
+  # Bionic on multiple architectures [amd64, arm64, ppc64le, s360x]
+  bionic_gcc_release:
+    name: Ubuntu 18.04 [GCC|Release]
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        sha256: [
+            5b949941cc9fb7014ade59c0d31dcf0a96d82a041aa80df9eca728efb13ac5b1, # amd64
+            8d6a296afe59717e284415108aa682ca3ebb2bb777de1d05977dcfd318570376, # arm64
+            7480c97fc5d5239f7a404c4573a9027bfad7e9f1ef28552ff8c02627688d5b0b, # ppc64le
+            8a101f24144617e3c3489d21d5f719b97778579d72385783641dbb8e655d0496, # s360x
+          ]
     env:
-      DOCKER_TAG: xenial-v6.10
+      DOCKER_TAG: ubuntu-bionic-v6.10@sha256:${{ matrix.sha256 }}
       COMPILER: gcc
       BUILD_TYPE: Release
       BUILD_DARTPY: OFF
     steps:
+      # https://github.com/marketplace/actions/docker-setup-qemu
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
       - name: Check out the repo
         uses: actions/checkout@v2
       - name: Pull dev container
-        run: docker pull ${{ env.DART_DEV_IMAGE }}:${{ env.DOCKER_TAG }}
+        run: docker pull $DART_DEV_IMAGE:$DOCKER_TAG
       - name: Build
         run: ${{ env.UBUNTU_BUILD_CMD }}
 
-  bionic_gcc_release:
-    name: Ubuntu 18.04 [GCC|Release]
+  # Other Ubuntu distros on amd64
+  ubuntu_gcc_release:
+    name: Ubuntu [GCC|Release]
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        distro: [xenial, focal, groovy, hirsute]
     env:
-      DOCKER_TAG: bionic-v6.10
+      DOCKER_TAG: ubuntu-${{ matrix.distro }}-v6.10
       COMPILER: gcc
       BUILD_TYPE: Release
       BUILD_DARTPY: ON
@@ -56,11 +72,12 @@ jobs:
       - name: Build
         run: ${{ env.UBUNTU_BUILD_CMD }}
 
-  focal_gcc_release:
-    name: Ubuntu 20.04 [GCC|Release]
+  # Archlinux on amd64
+  archlinux_gcc_release:
+    name: Archlinux [GCC|Release]
     runs-on: ubuntu-20.04
     env:
-      DOCKER_TAG: focal-v6.10
+      DOCKER_TAG: archlinux-v6.10
       COMPILER: gcc
       BUILD_TYPE: Release
       BUILD_DARTPY: ON
@@ -72,22 +89,7 @@ jobs:
       - name: Build
         run: ${{ env.UBUNTU_BUILD_CMD }}
 
-  groovy_gcc_release:
-    name: Ubuntu 20.10 [GCC|Release]
-    runs-on: ubuntu-20.04
-    env:
-      DOCKER_TAG: groovy-v6.10
-      COMPILER: gcc
-      BUILD_TYPE: Release
-      BUILD_DARTPY: ON
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@v2
-      - name: Pull dev container
-        run: docker pull ${{ env.DART_DEV_IMAGE }}:${{ env.DOCKER_TAG }}
-      - name: Build
-        run: ${{ env.UBUNTU_BUILD_CMD }}
-
+  # macOS 10.15 on amd64
   catalina_clang_release:
     name: macOS 10.15 [Clang|Release]
     runs-on: macos-10.15
@@ -107,9 +109,13 @@ jobs:
       - name: Build
         run: sudo -E .ci/script.sh
 
+  # Windows with MSVC and MSVC + ClangCl
   windows_2019_msvc:
     name: Windows [MSVC|Release]
     runs-on: windows-2019
+    strategy:
+      matrix:
+        toolset: ["", "-T ClangCl"]
     env:
       BUILD_TYPE: Release
       VCPKG_ROOT: "C:/dartsim/vcpkg"
@@ -128,37 +134,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -G "Visual Studio 16 2019" -A x64 -Wno-dev ^
-            -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
-            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
-            -DDART_MSVC_DEFAULT_OPTIONS=ON ^
-            -DDART_VERBOSE=ON
-          cmake --build . --target ALL_BUILD --parallel
-          ctest --output-on-fauilure
-
-  windows_2019_clang_cl:
-    name: Windows [ClangCl|Release]
-    runs-on: windows-2019
-    env:
-      BUILD_TYPE: Release
-      VCPKG_ROOT: "C:/dartsim/vcpkg"
-      VCPKG_BUILD_TAG: v0.2.0-70f192e
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Dependencies
-        shell: cmd
-        run: |
-          mkdir -p C:\dartsim
-          choco install -y wget
-          wget -q https://github.com/dartsim/vcpkg-build/releases/download/%VCPKG_BUILD_TAG%/vcpkg-dartsim-dependencies.zip
-          unzip -qq vcpkg-dartsim-dependencies.zip -d C:\dartsim
-      - name: Build
-        shell: cmd
-        run: |
-          mkdir build
-          cd build
-          cmake .. -G "Visual Studio 16 2019" -A x64 -Wno-dev ^
-            -T ClangCl ^
+          cmake .. -G "Visual Studio 16 2019" -A x64 -Wno-dev ${{ matrix.toolset }} ^
             -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
             -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
             -DDART_MSVC_DEFAULT_OPTIONS=ON ^
